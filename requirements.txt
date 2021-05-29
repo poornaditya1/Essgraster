@@ -1,5 +1,5 @@
 nltk==3.2.5
-tensorflow.keras
+tensorflow==1.15.0
 streamlit==0.82.0
 numpy==1.19.5
 keras_nightly==2.5.0.dev2021032900
