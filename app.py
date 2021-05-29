@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import nltk
+import os
 nltk.download('punkt')
 nltk.download('stopwords')
 import re
@@ -13,6 +14,8 @@ from gensim.test.utils import datapath
 from gensim.models import Word2Vec
 from keras.layers import Embedding, LSTM, Dense, Dropout, Lambda, Flatten
 from keras.models import Sequential, load_model, model_from_config
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 preds = 0
 n = 0
@@ -43,7 +46,7 @@ def e2s(essay_v, remove_stopwords):
 #     for word in words:
 #         if word in index2word_set:
 #             num_words += 1
-#             featureVec = np.add(featureVec,model[word])
+#             featureVec = np.add(featureVec,model[word])        
 #     featureVec = np.divide(featureVec,num_words)
 #     return featureVec
 
@@ -64,7 +67,7 @@ def getVecs(essays, model, num_features):
         for word in essay:
           if word in index2word_set:
             num_words += 1
-            featureVec = np.add(featureVec,model[word])
+            featureVec = np.add(featureVec,model[word])        
         featureVec = np.divide(featureVec,num_words)
         essayFeatureVecs[counter] = featureVec
         counter = counter + 1
@@ -78,7 +81,7 @@ def u_in():
 
 def header(url):
   st.markdown(f'<p style="font-size:50px;border-radius:5%;text-align:center;">{url}</p>', unsafe_allow_html=True)
-#  st.markdown("__Auto Essay Grader__")
+#  st.markdown("__Auto Essay Grader__")    
 def header1(url):
   st.markdown(f'<p style="font-size:26px;border-radius:2%;text-align:center;">{url}</p>', unsafe_allow_html=True)
 header("Essgraster")
@@ -88,7 +91,7 @@ header1("All the Best!!!!!!")
 
 st.subheader("Prompts:")
 with st.beta_expander("Topic 1: Effects computers have on people"):
-  st.write("""  More and more people use computers, but not everyone agrees that this benefits society. Those who support advances in technology believe that computers have a positive effect on people. They teach hand-eye coordination, give people the ability to learn about faraway places and people, and even allow people to talk online with other people. Others have different ideas. Some experts are concerned that people are spending too much time on their computers and less time exercising, enjoying nature, and interacting with family and friends.
+  st.write("""  More and more people use computers, but not everyone agrees that this benefits society. Those who support advances in technology believe that computers have a positive effect on people. They teach hand-eye coordination, give people the ability to learn about faraway places and people, and even allow people to talk online with other people. Others have different ideas. Some experts are concerned that people are spending too much time on their computers and less time exercising, enjoying nature, and interacting with family and friends. 
 
 Write a letter to your local newspaper in which you state your opinion on the effects computers have on people. Persuade the readers to agree with you.
 """)
@@ -102,7 +105,7 @@ with st.beta_expander("Topic 3: Rough Road Ahead"):
 with st.beta_expander("Topic 4: Winter Hibiscus"):
   st.write("""  Read the last paragraph of the story.
 
-"When they come back, Saeng vowed silently to herself, in the spring, when the snows melt and the geese return and this hibiscus is budding, then I will take that test again."
+"When they come back, Saeng vowed silently to herself, in the spring, when the snows melt and the geese return and this hibiscus is budding, then I will take that test again." 
 
 Write a response that explains why the author concludes the story with this paragraph. In your response, include details and examples from the story that support your ideas.
 """)
@@ -121,13 +124,56 @@ Do only one of the following: write a story about a time when you were patient O
 with st.beta_expander("Topic 8: Benefits of laughter"):
   st.write("""  We all understand the benefits of laughter. For example, someone once said, “Laughter is the shortest distance between two people.” Many other people believe that laughter is an important part of any relationship. Tell a true story in which laughter was one element or part.""")
 
-df,n = u_in()
+df,num = u_in()
 content = df
-if n is "":
-  n = 0
-model = Word2Vec.load("/model_weights/word2vec.model")
 
-lstm_model = keras.models.load_model('/model_weights/final_lstm.h5')
+text_file = open("test.txt", "wt")
+n = text_file.write(content)
+text_file.close()
+
+os.chdir('/content/drive/MyDrive/Cicada3301/Test files')
+e_list = [doc for doc in os.listdir() if doc.endswith('.txt')]
+e_notes =[open(File).read() for File in  e_list]
+
+vectorize = lambda Text: TfidfVectorizer().fit_transform(Text).toarray()
+similarity = lambda doc1, doc2: cosine_similarity([doc1, doc2])
+
+vectors = vectorize(e_notes)
+e_vectors = list(zip(e_list, vectors))
+
+def check_plagiarism():
+    plagiarism_results = set()
+    global e_vectors
+    for e_a, text_vector_a in e_vectors:
+        new_vectors =e_vectors.copy()
+        current_index = new_vectors.index((e_a, text_vector_a))
+        del new_vectors[current_index]
+        for e_b , text_vector_b in new_vectors:
+            sim_score = similarity(text_vector_a, text_vector_b)[0][1]
+            e_pair = sorted((e_a, e_b))
+            score = (e_pair[0], e_pair[1],sim_score)
+            plagiarism_results.add(score)
+    return plagiarism_results
+
+sum = 0
+flag = -1
+for data in check_plagiarism():
+  if data[0] == 'test.txt' or data[1] == 'test.txt':
+    if sum < data[2]:
+      sum = data[2]
+
+if sum > 0.2:
+  flag = 1
+
+if num is "":
+  num = 0
+
+if 'test.txt' in os.walk('/content/'):
+  os.remove("test.txt") 
+
+model = Word2Vec.load("/content/drive/MyDrive/Cicada3301/model_weights/word2vec.model")
+
+lstm_model = keras.models.load_model('/content/drive/MyDrive/Cicada3301/model_weights/final_lstm.h5')
 
 if len(content) > 20:
   num_features = 300
@@ -135,11 +181,13 @@ if len(content) > 20:
   clean_test_essays.append(essay_to_wordlist( content, remove_stopwords=True ))
   testDataVecs = getVecs( clean_test_essays, model, num_features )
 
-
+  
   testDataVecs = np.array(testDataVecs)
   testDataVecs = np.reshape(testDataVecs, (testDataVecs.shape[0], 1, testDataVecs.shape[1]))
 
   preds = lstm_model.predict(testDataVecs)
+  
+
 
   if math.isnan(preds):
     preds = 0
@@ -152,9 +200,16 @@ if len(content) > 20:
   #  preds = 0
 p = int(preds)
 
-if n is not 0 and p is not 0:
-  p = int(p*60/max_s[int(n)])
+if num is not 0 and p is not 0:  
+  p = p*60/max_s[int(num)]
   if p>60:
     p = 60
-  st.write("Question no. : " + n)
-  st.write("Final grade is " + str(p))
+  if sum < 0.3:
+    st.write("Question no. : " + str(num))
+    st.write("Final grade is " + str(p))
+    st.write("Plagiarism across all reference documents : " + str(sum))
+
+  else:
+    st.write("Plagiarism across all reference documents : " + str(sum))
+    st.write("Too much plagiarism...!!!!")
+    st.write("Hence, grade will also be copied to 0")
